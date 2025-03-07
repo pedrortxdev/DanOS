@@ -18,6 +18,7 @@ O sistema agora inclui os seguintes comandos:
 - `lscpu`: Exibe informações sobre a CPU
 - `free -h`: Exibe informações sobre o uso de memória
 - `df -h`: Exibe informações sobre o uso de disco
+- `speedtest`: Informações de rede
 
 ## Pré-requisitos
 
@@ -31,7 +32,7 @@ Para compilar e executar o DanOS, você precisará das seguintes dependências:
 ### Instalação
 
 ```bash
-git clone https://github.com/seu-usuario/DanOS.git
+git clone https://github.com/pedrortxdev/DanOS.git
 cd DanOS
 ```
 
