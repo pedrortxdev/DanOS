@@ -1,57 +1,95 @@
 #include "../include/print.h"
+#include "../include/common.h"
 
-char *vgaBuff = (char *)0xb8000; // VGA text buffer is located at physical address 0xb8000
-int vgaBuffPos = 0;              // Position of VGA buffer
+// Variáveis globais para controle do terminal
+static uint16_t* const VGA_MEMORY = (uint16_t*)0xB8000;
+static uint8_t cursor_x = 0;
+static uint8_t cursor_y = 0;
+static uint8_t current_color = 0x07; // Branco sobre preto
 
-void clear_screen(void)
-{
-    /*
-        We are multiplying the screen width by 2 because we are using an 8 bit pointer instead of a 16 bit.
-        So we need to increment twice on horizontal axis to reach the next VGA character.
-    */
-
-    int screen_size = (VGA_WIDTH * 2) * VGA_HEIGHT;
-
-    for (int i = 0; i < screen_size; i++)
-    {
-        vgaBuff[i] = 0;
-    }
+// Função para mover o cursor
+static void move_cursor() {
+    uint16_t pos = cursor_y * VGA_WIDTH + cursor_x;
+    outb(0x3D4, 14);
+    outb(0x3D5, (pos >> 8) & 0xFF);
+    outb(0x3D4, 15);
+    outb(0x3D5, pos & 0xFF);
 }
 
-void handle_next_line(void) {
-    for (int i = (int)(vgaBuffPos / 160) + (vgaBuffPos % 160); i < 80 + (vgaBuffPos % 160); i++)
-    {
-        vgaBuff[i] = 0;
-        vgaBuffPos += 2;
-    }
-}
-
-void print_msg(char* msg)
-{
-    /*
-        Size of each VGA character = 16 bits
-        ASCII character = first 8 bits
-        Color of ASCII character = last 8 bits
-
-        For more information, please refer to https://en.wikipedia.org/wiki/VGA_text_mode
-    */
-
-    int i = 0;
-
-    while (msg[i] != '\0')
-    {
-        // In case of next line, handle_next_line() is executed
-        if (msg[i] == '\n')
-        {
-            handle_next_line();
-            i++;
-            continue;
+// Função para rolar a tela
+static void scroll() {
+    if (cursor_y >= VGA_HEIGHT) {
+        // Move todas as linhas uma posição para cima
+        for (int i = 0; i < VGA_HEIGHT - 1; i++) {
+            for (int j = 0; j < VGA_WIDTH; j++) {
+                VGA_MEMORY[i * VGA_WIDTH + j] = VGA_MEMORY[(i + 1) * VGA_WIDTH + j];
+            }
         }
-
-        vgaBuff[vgaBuffPos] = msg[i];  // ASCII character is pushed into the buffer
-        vgaBuff[vgaBuffPos + 1] = 15; // Color of the character is pushed into the buffer
-
-        ++i;             // Increment position in message string
-        vgaBuffPos += 2; // Since we have used 2 indexes to make up a single character (ASCII character + color), we need to increment the position by 2
+        
+        // Limpa a última linha
+        for (int j = 0; j < VGA_WIDTH; j++) {
+            VGA_MEMORY[(VGA_HEIGHT - 1) * VGA_WIDTH + j] = (current_color << 8) | ' ';
+        }
+        
+        cursor_y--;
     }
+}
+
+// Função para imprimir um caractere
+void print_char(char c) {
+    if (c == '\n') {
+        cursor_x = 0;
+        cursor_y++;
+        scroll();
+    }
+    else if (c == '\b') {
+        if (cursor_x > 0) {
+            cursor_x--;
+        }
+        else if (cursor_y > 0) {
+            cursor_y--;
+            cursor_x = VGA_WIDTH - 1;
+        }
+        VGA_MEMORY[cursor_y * VGA_WIDTH + cursor_x] = (current_color << 8) | ' ';
+    }
+    else if (c >= ' ') {
+        VGA_MEMORY[cursor_y * VGA_WIDTH + cursor_x] = (current_color << 8) | c;
+        cursor_x++;
+        if (cursor_x >= VGA_WIDTH) {
+            cursor_x = 0;
+            cursor_y++;
+            scroll();
+        }
+    }
+    move_cursor();
+}
+
+// Função para imprimir uma string
+void print_msg(const char* msg) {
+    while (*msg) {
+        print_char(*msg++);
+    }
+}
+
+// Função para imprimir texto colorido
+void print_colored(const char* msg, uint8_t foreground, uint8_t background) {
+    uint8_t old_color = current_color;
+    current_color = (background << 4) | (foreground & 0x0F);
+    print_msg(msg);
+    current_color = old_color;
+}
+
+// Função para apagar o último caractere
+void print_backspace() {
+    print_char('\b');
+}
+
+// Função para limpar a tela
+void clear_screen() {
+    for (int i = 0; i < VGA_HEIGHT * VGA_WIDTH; i++) {
+        VGA_MEMORY[i] = (current_color << 8) | ' ';
+    }
+    cursor_x = 0;
+    cursor_y = 0;
+    move_cursor();
 }
